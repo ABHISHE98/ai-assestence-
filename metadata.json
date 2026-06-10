@@ -1,0 +1,6 @@
+{
+  "name": "AI Document Assistant",
+  "description": "A professional full-stack document assistant to analyze PDF, DOCX, TXT, and images, answering queries strictly using the extracted content.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
