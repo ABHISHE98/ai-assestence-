@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Sparkles, FileText, Globe, HelpCircle, ShieldAlert, CheckCircle2, ChevronRight, BookOpen, Layers } from "lucide-react";
+import { Sparkles, FileText, Globe, HelpCircle, ShieldAlert, CheckCircle2, ChevronRight, BookOpen, Layers, MessageSquare, Eye, Copy, Check, RefreshCw } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { SupportedLanguage, Message, AnalyzedDocument, LANGUAGES } from "./types";
 import UploadZone from "./components/UploadZone";
 import LanguageSelector from "./components/LanguageSelector";
-import DocumentPreview from "./components/DocumentPreview";
 import ChatPanel from "./components/ChatPanel";
 
 const SAMPLE_DOCS = [
@@ -61,6 +61,37 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sysStatusMsg, setSysStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<"chat" | "overview" | "raw">("chat");
+  const [copiedRaw, setCopiedRaw] = useState(false);
+
+  const getFormatSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const getFileIcon = (type: string) => {
+    switch (type) {
+      case "pdf":
+        return <FileText className="w-8 h-8 text-rose-500" />;
+      case "docx":
+        return <FileText className="w-8 h-8 text-indigo-400" />;
+      case "image":
+        return <FileText className="w-8 h-8 text-purple-500" />;
+      default:
+        return <FileText className="w-8 h-8 text-slate-400" />;
+    }
+  };
+
+  const handleCopyRawText = () => {
+    if (document) {
+      navigator.clipboard.writeText(document.extractedText);
+      setCopiedRaw(true);
+      setTimeout(() => setCopiedRaw(false), 2000);
+    }
+  };
 
   // Re-generate executive summary / re-analyze if language is changed while a document is loaded
   const handleLanguageChange = async (newLang: SupportedLanguage) => {
@@ -124,6 +155,7 @@ export default function App() {
     });
     // Reset conversation history for the new document
     setMessages([]);
+    setActiveTab("chat");
     setSysStatusMsg({ type: "success", text: `"${docData.name}" processed and analyzed successfully!` });
   };
 
@@ -253,6 +285,7 @@ export default function App() {
           // Ensure it looks like a question or phrase
           if (literalText.endsWith("?") || literalText.length > 15) {
             handleSendMessage(literalText);
+            setActiveTab("chat");
           }
         }
       }
@@ -384,29 +417,146 @@ export default function App() {
             </p>
           </div>
         ) : (
-          /* Document Loaded Workspace — Splitting into Grid Columns */
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 relative animate-fadeIn" id="document-loaded-grid">
-            
-            {/* Sidebar Column: Summary and preview of the document (5 cols wide) */}
-            <div className="lg:col-span-5 h-[500px] lg:h-full min-h-0 flex flex-col">
-              <DocumentPreview
-                document={document}
-                onClear={handleClearDocument}
-                onSelectQuestion={handleSendMessage}
-              />
+          /* Document Loaded Workspace — Full Width Tabbed Separation */
+          <div className="flex-1 flex flex-col min-h-0 animate-fadeIn" id="document-workspace-root">
+            {/* 1. Document Header with Stats */}
+            <div className="p-5 bg-[#0F0F11] border border-white/10 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-3.5">
+                <div className="p-2.5 bg-white/5 rounded-xl shadow-lg border border-white/10">
+                  {getFileIcon(document.detectedType)}
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base leading-tight break-all max-w-[280px] sm:max-w-md" title={document.name}>
+                    {document.name}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-400 font-medium whitespace-nowrap">
+                    <span className="uppercase text-[10px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5 font-mono text-slate-300">
+                      {document.detectedType}
+                    </span>
+                    <span className="h-1 w-1 bg-slate-700 rounded-full" />
+                    <span>{getFormatSize(document.size)}</span>
+                    <span className="h-1 w-1 bg-slate-700 rounded-full" />
+                    <span className="font-mono">{document.charCount.toLocaleString()} chars</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                id="upload-new-document-button"
+                type="button"
+                onClick={handleClearDocument}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#DFDFDF] hover:text-white hover:bg-white/10 transition-all rounded-lg border border-white/10 active:scale-95 cursor-pointer animate-fadeIn"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Upload New
+              </button>
             </div>
 
-            {/* Chat Column Panel (7 cols wide) */}
-            <div className="lg:col-span-7 h-[550px] lg:h-full min-h-0 flex flex-col">
-              <ChatPanel
-                documentText={document.extractedText}
-                messages={messages}
-                language={selectedLanguage}
-                onSendMessage={handleSendMessage}
-                isGenerating={isGenerating}
-                onClearHistory={handleClearHistory}
-              />
+            {/* 2. Top Navigation Tabs Bar */}
+            <div className="flex border-b border-white/10 mb-4 bg-[#0F0F11]/40 p-1.5 rounded-xl border border-white/5 shrink-0 select-none">
+              <button
+                type="button"
+                onClick={() => setActiveTab("chat")}
+                className={`flex-1 py-3 text-xs font-bold transition-all rounded-lg flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "chat"
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-serif italic font-semibold"
+                    : "text-slate-400 hover:text-slate-200 border border-transparent"
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Chat Assist
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setActiveTab("overview")}
+                className={`flex-1 py-3 text-xs font-bold transition-all rounded-lg flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "overview"
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-serif italic font-semibold"
+                    : "text-slate-400 hover:text-slate-200 border border-transparent"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" /> Document Overview
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("raw")}
+                className={`flex-1 py-3 text-xs font-bold transition-all rounded-lg flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "raw"
+                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-serif italic font-semibold"
+                    : "text-slate-400 hover:text-slate-200 border border-transparent"
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" /> Raw Text
+              </button>
             </div>
+
+            {/* 3. Conditional Tab Views (Complete separation) */}
+            {activeTab === "chat" && (
+              <div className="flex-1 flex flex-col min-h-0 animate-fadeIn" id="tab-content-chat">
+                <ChatPanel
+                  documentText={document.extractedText}
+                  messages={messages}
+                  language={selectedLanguage}
+                  onSendMessage={handleSendMessage}
+                  isGenerating={isGenerating}
+                  onClearHistory={handleClearHistory}
+                />
+              </div>
+            )}
+
+            {activeTab === "overview" && (
+              <div className="flex-1 bg-[#0F0F11] rounded-2xl border border-white/10 shadow-2xl p-6 overflow-y-auto max-h-[700px] animate-fadeIn" id="tab-content-overview">
+                <div id="ai-document-analysis-content" className="space-y-6">
+                  {/* Executive summary markdown render */}
+                  <div className="markdown-body text-slate-300 leading-relaxed text-sm antialiased prose prose-invert prose-indigo max-w-none prose-p:leading-relaxed prose-li:my-1">
+                    <ReactMarkdown>{document.analysis}</ReactMarkdown>
+                  </div>
+
+                  {/* Visual Callout info box */}
+                  <div className="p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
+                    <div className="flex items-start gap-2.5 text-xs text-indigo-300 font-medium leading-normal">
+                      <HelpCircle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <span>
+                        Tip: Click on any question in the summary above to automatically ask the chat assistant and open the chat view instantly!
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "raw" && (
+              <div className="flex-1 bg-[#0F0F11] rounded-2xl border border-white/10 shadow-2xl p-6 flex flex-col min-h-[400px] animate-fadeIn" id="tab-content-raw">
+                <div id="raw-document-plain-text" className="h-full flex flex-col relative flex-1 min-h-0">
+                  <div className="flex justify-between items-center mb-3 shrink-0">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                      Literal Extracted Workspace Text
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyRawText}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all font-semibold cursor-pointer"
+                    >
+                      {copiedRaw ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" /> Copy Raw Text
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 bg-[#0A0A0B] rounded-xl p-4 overflow-y-auto border border-white/5 min-h-[300px]">
+                    <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed select-text font-medium">
+                      {document.extractedText}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Sparkles, Loader2, RefreshCw, Landmark, Calendar, Terminal, Info, ClipboardCopy, FileQuestion } from "lucide-react";
+import { Send, Sparkles, Loader2, RefreshCw, Landmark, Calendar, Terminal, Info, ClipboardCopy, FileQuestion, Mic, MicOff } from "lucide-react";
 import { Message, SupportedLanguage } from "../types";
 
 interface ChatPanelProps {
@@ -22,6 +22,8 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const [inputValue, setInputValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Auto-scroll to bottom of conversation
   useEffect(() => {
@@ -29,6 +31,65 @@ export default function ChatPanel({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isGenerating]);
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+
+      // Select proper BCP-47 language tag matching supported list
+      const getLangCode = (lang: SupportedLanguage) => {
+        switch (lang) {
+          case "Hindi": return "hi-IN";
+          case "French": return "fr-FR";
+          case "German": return "de-DE";
+          case "Spanish": return "es-ES";
+          case "Arabic": return "ar-SA";
+          case "Chinese": return "zh-CN";
+          default: return "en-US";
+        }
+      };
+
+      rec.lang = getLangCode(language);
+
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputValue((prev) => prev ? `${prev} ${transcript}` : transcript);
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error", event);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+    }
+  }, [language]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Speech recognition is not fully supported or permission is blocked in this browser/environment.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,24 +220,46 @@ export default function ChatPanel({
 
       {/* Input box area */}
       <div className="p-3.5 border-t border-white/5 bg-[#0F0F11] shrink-0">
-        <form onSubmit={handleSubmit} className="flex gap-2 relative">
+        <form onSubmit={handleSubmit} className="flex gap-2 relative max-w-4xl mx-auto w-full">
           <input
             id="chat-query-input-field"
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={`Ask a question in ${language}...`}
+            placeholder={isListening ? "Listening... Speak now..." : `Ask a question in ${language}...`}
             disabled={isGenerating}
-            className="flex-1 px-4 py-3 bg-[#161618] border border-white/10 rounded-xl text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all text-white font-medium disabled:opacity-60"
+            className={`flex-1 px-4 py-3 bg-[#161618] border rounded-xl text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all text-white font-medium disabled:opacity-60 ${
+              isListening ? "border-red-500/50 ring-2 ring-red-500/10" : "border-white/10 focus:border-indigo-500/50"
+            }`}
           />
+          
+          {/* Microphone transcribe trigger */}
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={isGenerating}
+            title={isListening ? "Stop listening" : "Start voice input"}
+            className={`px-4 rounded-xl transition-all font-semibold flex items-center justify-center border border-white/10 active:scale-95 disabled:scale-100 shrink-0 cursor-pointer ${
+              isListening
+                ? "bg-red-500/10 text-red-500 border-red-500/20 animate-pulse"
+                : "bg-white/5 hover:bg-white/15 text-slate-300"
+            }`}
+          >
+            {isListening ? (
+              <MicOff className="w-5 h-5 text-red-400" />
+            ) : (
+              <Mic className="w-5 h-5 text-slate-400" />
+            )}
+          </button>
+
           <button
             id="chat-send-submit-button"
             type="submit"
             disabled={!inputValue.trim() || isGenerating}
-            className="px-4 bg-indigo-500 hover:bg-indigo-600 disabled:bg-white/5 text-white disabled:text-slate-600 rounded-xl transition-all font-semibold flex items-center justify-center border border-transparent shadow-lg active:scale-95 disabled:scale-100 shrink-0 cursor-pointer"
+            className="px-5 bg-indigo-500 hover:bg-indigo-600 disabled:bg-white/5 text-white disabled:text-slate-600 rounded-xl transition-all font-semibold flex items-center justify-center border border-transparent shadow-lg active:scale-95 disabled:scale-100 shrink-0 cursor-pointer"
           >
             {isGenerating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Send className="w-4 h-4" />
             )}
